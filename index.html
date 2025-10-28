@@ -16,7 +16,7 @@
             <div class="header-content">
                 <div>
                     <h1 class="header-title">Staffing Margin Calculator</h1>
-                    <p class="header-subtitle">Calculate what client rate you should charge to achieve your desired profit margin</p>
+                    <p class="header-subtitle">Compare all locations and calculate margins or rates for your staffing proposals</p>
                 </div>
                 <div class="header-actions">
                     <button id="refreshBtn" class="btn-refresh" onclick="refreshData()" title="Refresh data from Google Sheets">
@@ -37,6 +37,7 @@
                 <div class="input-panel">
                     <div class="panel-header">
                         <h2>Add Positions</h2>
+                        <div class="mode-indicator" id="modeIndicator" style="display: none;"></div>
                     </div>
                     
                     <form id="positionForm" class="input-form">
@@ -48,26 +49,43 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="location">Resource Location</label>
-                            <select id="location" class="form-control">
-                                <option value="">Compare all locations...</option>
-                                <option value="onshore">Onshore</option>
-                                <option value="offshore">Offshore</option>
-                                <option value="nearshore">Nearshore</option>
-                            </select>
-                            <small class="form-hint">Leave blank to compare all 3 locations</small>
+                            <label for="hours">Hours <span class="required">*</span></label>
+                            <input type="number" id="hours" class="form-control" placeholder="e.g., 160" required min="1">
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="hours">Hours <span class="required">*</span></label>
-                                <input type="number" id="hours" class="form-control" placeholder="e.g., 160" required min="1">
+                        <!-- Calculate By Section -->
+                        <div class="calculate-by-section">
+                            <label class="section-label">Calculate By:</label>
+                            
+                            <div class="radio-group">
+                                <div class="radio-option">
+                                    <input type="radio" id="modeMargin" name="calculateMode" value="margin" checked>
+                                    <label for="modeMargin" class="radio-label">
+                                        <span class="radio-title">Desired Margin %</span>
+                                        <span class="radio-description">Enter your target profit margin</span>
+                                    </label>
+                                </div>
+                                <div class="radio-option">
+                                    <input type="radio" id="modeRate" name="calculateMode" value="rate">
+                                    <label for="modeRate" class="radio-label">
+                                        <span class="radio-title">Target Client Rate</span>
+                                        <span class="radio-description">Enter what you'll charge the client</span>
+                                    </label>
+                                </div>
                             </div>
 
-                            <div class="form-group">
-                                <label for="desiredMargin">Target Client Rate ($/hr) or Margin (%)</label>
-                                <input type="number" id="desiredMargin" class="form-control" placeholder="e.g., 200 or 70" min="0" step="0.01">
-                                <small class="form-hint">Enter client rate ($200) OR margin % (70). For comparison mode, client rate recommended.</small>
+                            <!-- Input Fields -->
+                            <div class="mode-inputs">
+                                <div id="marginInput" class="mode-input-group active">
+                                    <label for="desiredMargin">Desired Margin (%)</label>
+                                    <input type="number" id="desiredMargin" class="form-control" placeholder="e.g., 70" min="0" max="99" step="0.01">
+                                    <small class="form-hint">Leave blank to use 70% default</small>
+                                </div>
+                                <div id="rateInput" class="mode-input-group">
+                                    <label for="clientRate">Target Client Rate ($/hr)</label>
+                                    <input type="number" id="clientRate" class="form-control" placeholder="e.g., 150" min="0" step="0.01">
+                                    <small class="form-hint">What you'll charge per hour</small>
+                                </div>
                             </div>
                         </div>
 
@@ -100,23 +118,8 @@
                         <div class="panel-header">
                             <h2>Summary</h2>
                         </div>
-                        <div class="summary-grid">
-                            <div class="summary-item">
-                                <span class="summary-label">Total Positions</span>
-                                <span class="summary-value" id="summaryPositions">0</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Total Hours</span>
-                                <span class="summary-value" id="summaryHours">0</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Selected Total Cost</span>
-                                <span class="summary-value" id="summarySelected">$0.00</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Avg Margin</span>
-                                <span class="summary-value" id="summaryAvgMargin">0%</span>
-                            </div>
+                        <div class="summary-content" id="summaryContent">
+                            <!-- Summary will be generated based on mode -->
                         </div>
                     </div>
 
@@ -124,7 +127,12 @@
                     <div class="results-placeholder" id="resultsPlaceholder">
                         <div class="placeholder-icon">📊</div>
                         <h3>Ready to Calculate</h3>
-                        <p>Add your first position to see calculations and summary</p>
+                        <p>Add your first position to see location comparison</p>
+                        <div class="placeholder-features">
+                            <div class="feature">✓ Compare all 3 locations automatically</div>
+                            <div class="feature">✓ Calculate by margin % or client rate</div>
+                            <div class="feature">✓ See best recommendations instantly</div>
+                        </div>
                     </div>
                 </div>
 

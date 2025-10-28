@@ -4,6 +4,7 @@
 
 let positions = [];
 let positionIdCounter = 0;
+let calculationMode = null; // 'margin' or 'rate'
 
 // ========================================
 // Initialize Application
@@ -20,6 +21,7 @@ function onDataLoaded() {
 
 function initializeApp() {
     populateRoles();
+    setupModeToggle();
     document.getElementById('positionForm').addEventListener('submit', handleAddPosition);
     document.getElementById('clearAllBtn').addEventListener('click', handleClearAll);
 }
@@ -42,6 +44,33 @@ function populateRoles() {
 }
 
 // ========================================
+// Mode Toggle Setup
+// ========================================
+
+function setupModeToggle() {
+    const marginRadio = document.getElementById('modeMargin');
+    const rateRadio = document.getElementById('modeRate');
+    const marginInput = document.getElementById('marginInput');
+    const rateInput = document.getElementById('rateInput');
+    
+    marginRadio.addEventListener('change', () => {
+        if (marginRadio.checked) {
+            marginInput.classList.add('active');
+            rateInput.classList.remove('active');
+            document.getElementById('clientRate').value = '';
+        }
+    });
+    
+    rateRadio.addEventListener('change', () => {
+        if (rateRadio.checked) {
+            rateInput.classList.add('active');
+            marginInput.classList.remove('active');
+            document.getElementById('desiredMargin').value = '';
+        }
+    });
+}
+
+// ========================================
 // Handle Add Position
 // ========================================
 
@@ -49,32 +78,18 @@ function handleAddPosition(e) {
     e.preventDefault();
     
     const role = document.getElementById('role').value;
-    const location = document.getElementById('location').value;
     const hours = parseFloat(document.getElementById('hours').value);
-    const rateOrMarginInput = document.getElementById('desiredMargin').value;
-    
-    // Determine if input is client rate (>100) or margin percentage (<100)
-    let clientRate = null;
-    let desiredMargin = null;
-    
-    if (rateOrMarginInput) {
-        const value = parseFloat(rateOrMarginInput);
-        if (value >= 100) {
-            // It's a client rate (dollars)
-            clientRate = value;
-        } else {
-            // It's a margin percentage
-            desiredMargin = value / 100;
-        }
-    }
-    
-    // Defaults if nothing provided
-    if (!clientRate && !desiredMargin) {
-        desiredMargin = 0.70; // Default 70%
-    }
+    const marginRadio = document.getElementById('modeMargin');
+    const selectedMode = marginRadio.checked ? 'margin' : 'rate';
     
     if (!role || !hours) {
         alert('Please select a Role and enter Hours');
+        return;
+    }
+    
+    // Check if mode is locked
+    if (calculationMode && calculationMode !== selectedMode) {
+        alert(`You started with ${calculationMode === 'margin' ? 'Margin %' : 'Client Rate'} mode. Please clear all positions to switch modes.`);
         return;
     }
     
@@ -84,57 +99,109 @@ function handleAddPosition(e) {
         return;
     }
     
-    // If no location, this is comparison mode
-    if (!location) {
-        const position = {
+    let position;
+    
+    if (selectedMode === 'margin') {
+        // MARGIN MODE
+        const desiredMarginInput = document.getElementById('desiredMargin').value;
+        const desiredMargin = desiredMarginInput ? parseFloat(desiredMarginInput) / 100 : 0.70;
+        
+        position = {
             id: ++positionIdCounter,
             role,
             hours,
-            clientRate,
+            mode: 'margin',
             desiredMargin,
-            roleData,
-            comparisonMode: true
+            roleData
         };
-        positions.push(position);
-    } else {
-        // Standard mode with specific location
-        const cost = roleData[location].cost;
-        let finalClientRate;
-        let finalMargin;
         
-        if (clientRate) {
-            // User provided client rate, calculate margin
-            finalClientRate = clientRate;
-            finalMargin = (clientRate - cost) / clientRate;
-        } else {
-            // User provided margin, calculate client rate
-            finalClientRate = cost / (1 - desiredMargin);
-            finalMargin = desiredMargin;
+        // Set calculation mode on first position
+        if (!calculationMode) {
+            calculationMode = 'margin';
+            updateModeIndicator();
+            lockModeInputs();
         }
+    } else {
+        // RATE MODE
+        const clientRateInput = document.getElementById('clientRate').value;
+        if (!clientRateInput) {
+            alert('Please enter a Target Client Rate');
+            return;
+        }
+        const clientRate = parseFloat(clientRateInput);
         
-        const totalCost = hours * finalClientRate;
-        
-        const position = {
+        position = {
             id: ++positionIdCounter,
             role,
-            location,
             hours,
-            desiredMargin: finalMargin,
-            cost,
-            clientRate: finalClientRate,
-            totalCost,
-            roleData,
-            comparisonMode: false
+            mode: 'rate',
+            clientRate,
+            roleData
         };
-        positions.push(position);
+        
+        // Set calculation mode on first position
+        if (!calculationMode) {
+            calculationMode = 'rate';
+            updateModeIndicator();
+            lockModeInputs();
+        }
     }
     
+    positions.push(position);
     renderPositions();
     updateSummary();
-    document.getElementById('positionForm').reset();
+    
+    // Reset only the input fields, not the mode selection
+    document.getElementById('role').value = '';
+    document.getElementById('hours').value = '';
+    if (calculationMode === 'margin') {
+        document.getElementById('desiredMargin').value = '';
+    } else {
+        document.getElementById('clientRate').value = '';
+    }
+    
     document.getElementById('resultsPlaceholder').style.display = 'none';
     document.getElementById('positionsPanel').style.display = 'block';
     document.getElementById('summaryPanel').style.display = 'block';
+}
+
+// ========================================
+// Mode Indicator
+// ========================================
+
+function updateModeIndicator() {
+    const indicator = document.getElementById('modeIndicator');
+    if (calculationMode === 'margin') {
+        indicator.innerHTML = '🎯 <strong>Mode:</strong> Calculating by Margin %';
+        indicator.className = 'mode-indicator mode-margin';
+    } else {
+        indicator.innerHTML = '💰 <strong>Mode:</strong> Calculating by Client Rate';
+        indicator.className = 'mode-indicator mode-rate';
+    }
+    indicator.style.display = 'block';
+}
+
+function lockModeInputs() {
+    const marginRadio = document.getElementById('modeMargin');
+    const rateRadio = document.getElementById('modeRate');
+    
+    if (calculationMode === 'margin') {
+        rateRadio.disabled = true;
+        rateRadio.parentElement.classList.add('disabled');
+    } else {
+        marginRadio.disabled = true;
+        marginRadio.parentElement.classList.add('disabled');
+    }
+}
+
+function unlockModeInputs() {
+    const marginRadio = document.getElementById('modeMargin');
+    const rateRadio = document.getElementById('modeRate');
+    
+    marginRadio.disabled = false;
+    rateRadio.disabled = false;
+    marginRadio.parentElement.classList.remove('disabled');
+    rateRadio.parentElement.classList.remove('disabled');
 }
 
 // ========================================
@@ -162,44 +229,29 @@ function createPositionCard(position) {
     const card = document.createElement('div');
     card.className = 'position-card';
     
-    // COMPARISON MODE
-    if (position.comparisonMode) {
-        const locations = [
-            { name: 'Onshore', location: 'onshore', cost: position.roleData.onshore.cost },
-            { name: 'Offshore', location: 'offshore', cost: position.roleData.offshore.cost },
-            { name: 'Nearshore', location: 'nearshore', cost: position.roleData.nearshore.cost }
-        ];
-        
-        // Determine client rate to use
-        let standardClientRate;
-        if (position.clientRate) {
-            // User provided client rate directly
-            standardClientRate = position.clientRate;
-        } else if (position.desiredMargin) {
-            // User provided margin, calculate rate based on highest cost
-            const highestCost = Math.max(...locations.map(l => l.cost));
-            standardClientRate = highestCost / (1 - position.desiredMargin);
-        } else {
-            // Default: use 70% margin on highest cost
-            const highestCost = Math.max(...locations.map(l => l.cost));
-            standardClientRate = highestCost / (1 - 0.70);
-        }
-        
+    const locations = [
+        { name: 'Onshore', location: 'onshore', cost: position.roleData.onshore.cost },
+        { name: 'Offshore', location: 'offshore', cost: position.roleData.offshore.cost },
+        { name: 'Nearshore', location: 'nearshore', cost: position.roleData.nearshore.cost }
+    ];
+    
+    if (position.mode === 'margin') {
+        // MARGIN MODE: Calculate client rates for each location
         locations.forEach(loc => {
-            loc.clientRate = standardClientRate;
+            loc.clientRate = loc.cost / (1 - position.desiredMargin);
             loc.totalCost = position.hours * loc.clientRate;
             loc.totalProfit = loc.totalCost - (position.hours * loc.cost);
-            loc.actualMargin = ((loc.clientRate - loc.cost) / loc.clientRate) * 100;
+            loc.margin = position.desiredMargin * 100;
         });
         
-        locations.sort((a, b) => b.actualMargin - a.actualMargin);
+        locations.sort((a, b) => a.totalCost - b.totalCost);
         const best = locations[0];
         
         card.innerHTML = `
             <div class="position-header">
                 <div>
                     <div class="position-title">${position.role}</div>
-                    <span class="comparison-badge">📊 Comparing All Locations</span>
+                    <span class="mode-badge margin">Margin Mode</span>
                 </div>
                 <button class="position-delete" onclick="deletePosition(${position.id})">✕</button>
             </div>
@@ -209,55 +261,58 @@ function createPositionCard(position) {
                     <span class="position-metric-value">${position.hours}</span>
                 </div>
                 <div class="position-metric">
-                    <span class="position-metric-label">Client Pays</span>
-                    <span class="position-metric-value">${formatCurrency(standardClientRate)}/hr</span>
+                    <span class="position-metric-label">Target Margin</span>
+                    <span class="position-metric-value">${position.margin ? position.margin.toFixed(1) : (position.desiredMargin * 100).toFixed(1)}%</span>
                 </div>
             </div>
-            <div class="all-locations-comparison">
-                <div class="comparison-header">
-                    <span class="comparison-icon">📊</span>
-                    <span class="comparison-title">If Client Pays ${formatCurrency(standardClientRate)}/hr - Which Location Wins?</span>
-                </div>
-                <div class="location-options-grid">
-                    ${locations.map(loc => `
-                        <div class="location-full-option ${loc.location === best.location ? 'best-option' : ''}">
-                            ${loc.location === best.location ? '<div class="best-badge">🏆 BEST MARGIN</div>' : ''}
-                            <div class="location-full-name">${loc.name}</div>
-                            <div class="location-full-metrics">
-                                <div class="metric-row">
-                                    <span class="metric-label">Your Cost/hr:</span>
-                                    <span class="metric-value">${formatCurrency(loc.cost)}</span>
-                                </div>
-                                <div class="metric-row highlight">
-                                    <span class="metric-label">Your ACTUAL Margin:</span>
-                                    <span class="metric-value-large">${loc.actualMargin.toFixed(1)}%</span>
-                                </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Total to Client:</span>
-                                    <span class="metric-value">${formatCurrency(loc.totalCost)}</span>
-                                </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Your Profit:</span>
-                                    <span class="metric-value profit">${formatCurrency(loc.totalProfit)}</span>
-                                </div>
+            <div class="location-comparison-grid">
+                ${locations.map(loc => `
+                    <div class="location-card ${loc.location === best.location ? 'best' : ''}">
+                        ${loc.location === best.location ? '<div class="best-badge">🏆 LOWEST COST</div>' : ''}
+                        <div class="location-name">${loc.name}</div>
+                        <div class="location-metrics">
+                            <div class="metric">
+                                <span class="label">Your Cost/hr</span>
+                                <span class="value">${formatCurrency(loc.cost)}</span>
+                            </div>
+                            <div class="metric highlight">
+                                <span class="label">Charge Client</span>
+                                <span class="value large">${formatCurrency(loc.clientRate)}/hr</span>
+                            </div>
+                            <div class="metric">
+                                <span class="label">Total Project</span>
+                                <span class="value">${formatCurrency(loc.totalCost)}</span>
+                            </div>
+                            <div class="metric success">
+                                <span class="label">Your Profit</span>
+                                <span class="value">${formatCurrency(loc.totalProfit)}</span>
                             </div>
                         </div>
-                    `).join('')}
-                </div>
-                <div class="recommendation-box">
-                    <strong>💡 Winner:</strong> <strong>${best.name}</strong> gives you ${best.actualMargin.toFixed(1)}% margin 
-                    (earn ${formatCurrency(best.totalProfit)} profit) · ${(best.actualMargin - locations[2].actualMargin).toFixed(1)}% better than ${locations[2].name}!
-                </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="recommendation">
+                💡 <strong>Best:</strong> ${best.name} at ${formatCurrency(best.totalCost)} 
+                (save ${formatCurrency(locations[2].totalCost - best.totalCost)} vs ${locations[2].name})
             </div>
         `;
-    } 
-    // STANDARD MODE
-    else {
+    } else {
+        // RATE MODE: Calculate margins for each location
+        locations.forEach(loc => {
+            loc.clientRate = position.clientRate;
+            loc.totalCost = position.hours * loc.clientRate;
+            loc.totalProfit = loc.totalCost - (position.hours * loc.cost);
+            loc.margin = loc.cost > 0 ? ((loc.clientRate - loc.cost) / loc.clientRate) * 100 : 0;
+        });
+        
+        locations.sort((a, b) => b.margin - a.margin);
+        const best = locations[0];
+        
         card.innerHTML = `
             <div class="position-header">
                 <div>
                     <div class="position-title">${position.role}</div>
-                    <span class="position-location ${position.location}">${position.location}</span>
+                    <span class="mode-badge rate">Rate Mode</span>
                 </div>
                 <button class="position-delete" onclick="deletePosition(${position.id})">✕</button>
             </div>
@@ -267,21 +322,39 @@ function createPositionCard(position) {
                     <span class="position-metric-value">${position.hours}</span>
                 </div>
                 <div class="position-metric">
-                    <span class="position-metric-label">Margin</span>
-                    <span class="position-metric-value">${(position.desiredMargin * 100).toFixed(1)}%</span>
-                </div>
-                <div class="position-metric">
-                    <span class="position-metric-label">Cost/hr</span>
-                    <span class="position-metric-value">${formatCurrency(position.cost)}</span>
-                </div>
-                <div class="position-metric">
                     <span class="position-metric-label">Client Rate</span>
-                    <span class="position-metric-value">${formatCurrency(position.clientRate)}</span>
+                    <span class="position-metric-value">${formatCurrency(position.clientRate)}/hr</span>
                 </div>
-                <div class="position-metric" style="grid-column: span 2;">
-                    <span class="position-metric-label">Total Cost</span>
-                    <span class="position-metric-value" style="font-size: 1.25rem; color: var(--primary-blue);">${formatCurrency(position.totalCost)}</span>
-                </div>
+            </div>
+            <div class="location-comparison-grid">
+                ${locations.map(loc => `
+                    <div class="location-card ${loc.location === best.location ? 'best' : ''}">
+                        ${loc.location === best.location ? '<div class="best-badge">🏆 BEST MARGIN</div>' : ''}
+                        <div class="location-name">${loc.name}</div>
+                        <div class="location-metrics">
+                            <div class="metric">
+                                <span class="label">Your Cost/hr</span>
+                                <span class="value">${formatCurrency(loc.cost)}</span>
+                            </div>
+                            <div class="metric highlight">
+                                <span class="label">Your Margin</span>
+                                <span class="value large">${loc.margin.toFixed(1)}%</span>
+                            </div>
+                            <div class="metric">
+                                <span class="label">Total Revenue</span>
+                                <span class="value">${formatCurrency(loc.totalCost)}</span>
+                            </div>
+                            <div class="metric success">
+                                <span class="label">Your Profit</span>
+                                <span class="value">${formatCurrency(loc.totalProfit)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="recommendation">
+                💡 <strong>Best:</strong> ${best.name} with ${best.margin.toFixed(1)}% margin 
+                (earn ${formatCurrency(best.totalProfit)} profit)
             </div>
         `;
     }
@@ -297,6 +370,9 @@ window.deletePosition = function(id) {
     positions = positions.filter(p => p.id !== id);
     
     if (positions.length === 0) {
+        calculationMode = null;
+        unlockModeInputs();
+        document.getElementById('modeIndicator').style.display = 'none';
         document.getElementById('positionsPanel').style.display = 'none';
         document.getElementById('summaryPanel').style.display = 'none';
         document.getElementById('resultsPlaceholder').style.display = 'block';
@@ -314,6 +390,9 @@ function handleClearAll() {
     if (positions.length === 0) return;
     if (confirm('Clear all positions?')) {
         positions = [];
+        calculationMode = null;
+        unlockModeInputs();
+        document.getElementById('modeIndicator').style.display = 'none';
         document.getElementById('positionsPanel').style.display = 'none';
         document.getElementById('summaryPanel').style.display = 'none';
         document.getElementById('resultsPlaceholder').style.display = 'block';
@@ -327,31 +406,81 @@ function handleClearAll() {
 function updateSummary() {
     if (positions.length === 0) return;
     
-    const totalPositions = positions.length;
-    let totalHours = 0;
-    let totalCost = 0;
-    let totalMargin = 0;
+    const summaryContent = document.getElementById('summaryContent');
     
-    positions.forEach(p => {
-        totalHours += p.hours;
-        totalMargin += p.desiredMargin;
-        
-        if (p.comparisonMode) {
-            // For comparison, use offshore (cheapest usually)
-            const cost = p.roleData.offshore.cost;
-            const rate = cost / (1 - p.desiredMargin);
-            totalCost += p.hours * rate;
-        } else {
-            totalCost += p.totalCost;
-        }
+    // Calculate totals for each location
+    const locationTotals = {
+        onshore: { totalCost: 0, totalProfit: 0, totalHours: 0, name: 'Onshore' },
+        offshore: { totalCost: 0, totalProfit: 0, totalHours: 0, name: 'Offshore' },
+        nearshore: { totalCost: 0, totalProfit: 0, totalHours: 0, name: 'Nearshore' }
+    };
+    
+    positions.forEach(pos => {
+        ['onshore', 'offshore', 'nearshore'].forEach(loc => {
+            const cost = pos.roleData[loc].cost;
+            let clientRate, totalCost, profit;
+            
+            if (pos.mode === 'margin') {
+                clientRate = cost / (1 - pos.desiredMargin);
+                totalCost = pos.hours * clientRate;
+                profit = totalCost - (pos.hours * cost);
+            } else {
+                clientRate = pos.clientRate;
+                totalCost = pos.hours * clientRate;
+                profit = totalCost - (pos.hours * cost);
+            }
+            
+            locationTotals[loc].totalCost += totalCost;
+            locationTotals[loc].totalProfit += profit;
+            locationTotals[loc].totalHours += pos.hours;
+        });
     });
     
-    const avgMargin = totalMargin / totalPositions;
+    // Find best location
+    const locationsArray = Object.values(locationTotals);
+    locationsArray.sort((a, b) => a.totalCost - b.totalCost);
+    const best = locationsArray[0];
+    const worst = locationsArray[2];
     
-    document.getElementById('summaryPositions').textContent = totalPositions;
-    document.getElementById('summaryHours').textContent = totalHours;
-    document.getElementById('summarySelected').textContent = formatCurrency(totalCost);
-    document.getElementById('summaryAvgMargin').textContent = (avgMargin * 100).toFixed(1) + '%';
+    summaryContent.innerHTML = `
+        <div class="summary-header">
+            <h3>Location Comparison Summary</h3>
+            <div class="summary-stat">${positions.length} Positions · ${locationTotals.onshore.totalHours} Total Hours</div>
+        </div>
+        
+        <div class="summary-locations">
+            ${locationsArray.map(loc => {
+                const isBest = loc.name === best.name;
+                const margin = (loc.totalProfit / loc.totalCost) * 100;
+                return `
+                    <div class="summary-location ${isBest ? 'best' : ''}">
+                        ${isBest ? '<div class="summary-best-badge">🏆 BEST OVERALL</div>' : ''}
+                        <div class="summary-location-name">${loc.name}</div>
+                        <div class="summary-location-metrics">
+                            <div class="summary-metric">
+                                <span class="label">Total to Client</span>
+                                <span class="value">${formatCurrency(loc.totalCost)}</span>
+                            </div>
+                            <div class="summary-metric">
+                                <span class="label">Your Profit</span>
+                                <span class="value profit">${formatCurrency(loc.totalProfit)}</span>
+                            </div>
+                            <div class="summary-metric">
+                                <span class="label">Avg Margin</span>
+                                <span class="value">${margin.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        
+        <div class="summary-recommendation">
+            <strong>📊 Recommendation:</strong> Choose <strong>${best.name}</strong> to save 
+            ${formatCurrency(worst.totalCost - best.totalCost)} vs ${worst.name} 
+            (${((worst.totalCost - best.totalCost) / worst.totalCost * 100).toFixed(1)}% savings)
+        </div>
+    `;
 }
 
 // ========================================
